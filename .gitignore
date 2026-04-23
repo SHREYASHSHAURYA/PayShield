@@ -1,0 +1,31 @@
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Model artifacts
+*.joblib
+
+# Logs
+*.log
+
+# Frontend
+node_modules/
+frontend/dist/
+.vite/
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
