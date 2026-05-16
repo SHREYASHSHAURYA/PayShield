@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: payshield-backend
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_NAME
+        value: PayShield
+      - key: API_PREFIX
+        value: /api/v1
+      - key: FRONTEND_ORIGIN
+        value: https://your-frontend-domain.com
+      - key: MODEL_PATH
+        value: models_store/scam_text_pipeline.joblib
+      - key: LOW_RISK_MAX
+        value: "24"
+      - key: MEDIUM_RISK_MAX
+        value: "49"
+      - key: HIGH_RISK_MAX
+        value: "74"
+      - key: CRITICAL_RISK_MAX
+        value: "100"
+      - key: MAX_INTERACTION_EVENTS
+        value: "50"
+      - key: API_KEY
+        sync: false
+      - key: RATE_LIMIT_REQUESTS
+        value: "60"
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: AUDIT_LOG_FILE
+        value: logs/audit.log

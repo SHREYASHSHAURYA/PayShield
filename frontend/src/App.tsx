@@ -1,6 +1,8 @@
 import { FormEvent, useState } from "react";
 import { assessRisk } from "./services/assessment";
+import { fetchAuditLogs } from "./services/admin";
 import type { AssessmentRequest, AssessmentResponse } from "./types/assessment";
+import type { AuditLogEntry } from "./types/admin";
 
 const initialPayload: AssessmentRequest = {
   session_id: "demo-session-1",
@@ -44,6 +46,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
@@ -72,6 +79,20 @@ export default function App() {
     }
   };
 
+  const handleLoadAuditLogs = async () => {
+    setAdminLoading(true);
+    setAdminError("");
+
+    try {
+      const response = await fetchAuditLogs();
+      setAuditLogs(response.entries);
+    } catch (err) {
+      setAdminError("Failed to load audit logs.");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
   return (
     <div style={styles.page}>
       <div style={styles.container}>
@@ -79,9 +100,31 @@ export default function App() {
           <p style={styles.kicker}>PayShield</p>
           <h1 style={styles.title}>Pre-Transaction Scam Risk Assistant</h1>
           <p style={styles.subtitle}>
-            Enter the visible interaction context and payment details. PayShield
-            will estimate scam risk before payment execution.
+            Enter only the visible message, payment request, or QR-related
+            context. PayShield will estimate pre-transaction scam risk and
+            explain why the interaction looks safe or suspicious.
           </p>
+        </div>
+
+        <div style={styles.adminToolbar}>
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={() => setShowAdmin((value) => !value)}
+          >
+            {showAdmin ? "Hide Admin Dashboard" : "Show Admin Dashboard"}
+          </button>
+
+          {showAdmin ? (
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={handleLoadAuditLogs}
+              disabled={adminLoading}
+            >
+              {adminLoading ? "Loading Logs..." : "Load Audit Logs"}
+            </button>
+          ) : null}
         </div>
 
         <form style={styles.layout} onSubmit={handleSubmit}>
@@ -107,6 +150,10 @@ export default function App() {
                 placeholder="Example: I am from bank customer care. Your account will be blocked. Scan this QR and pay now urgently."
                 required
               />
+              <span style={styles.helperText}>
+                Include only what the user can see, such as the message text,
+                payment request wording, or QR-related text.
+              </span>
             </label>
 
             <label style={styles.label}>
@@ -217,6 +264,10 @@ export default function App() {
                 <option value="collect_request">Collect Request</option>
                 <option value="payment_link">Payment Link</option>
               </select>
+              <span style={styles.helperText}>
+                Choose the visible payment method involved in the interaction,
+                if any.
+              </span>
             </label>
 
             <label style={styles.label}>
@@ -281,6 +332,10 @@ export default function App() {
                 }
                 placeholder="name@bank"
               />
+              <span style={styles.helperText}>
+                Enter the visible UPI ID only if it was shared in the
+                interaction.
+              </span>
             </label>
 
             <div style={styles.checkboxGroup}>
@@ -344,6 +399,54 @@ export default function App() {
           </section>
         </form>
 
+        {showAdmin ? (
+          <section style={styles.adminPanel}>
+            <h2 style={styles.sectionTitle}>Admin Dashboard</h2>
+
+            {adminError ? <p style={styles.error}>{adminError}</p> : null}
+
+            {auditLogs.length > 0 ? (
+              <ul style={styles.signalList}>
+                {auditLogs.map((entry, index) => (
+                  <li
+                    key={`${entry.session_id}-${index}`}
+                    style={styles.signalCard}
+                  >
+                    <div style={styles.signalHeader}>
+                      <strong style={styles.signalName}>
+                        {entry.session_id}
+                      </strong>
+                      <span style={styles.signalConfidence}>
+                        {formatTitleCase(entry.risk_level)}
+                      </span>
+                    </div>
+                    <p style={styles.signalEvidence}>
+                      Time: {formatTimestamp(entry.timestamp)}
+                    </p>
+                    <p style={styles.signalEvidence}>
+                      Client: {entry.client_id}
+                    </p>
+                    <p style={styles.signalEvidence}>
+                      Risk Score: {entry.risk_score}
+                    </p>
+                    <p style={styles.signalEvidence}>
+                      Stage: {formatTitleCase(entry.current_stage)}
+                    </p>
+                    <p style={styles.signalEvidence}>
+                      Signal Count: {entry.signal_count}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p style={styles.paragraph}>
+                No audit logs loaded yet. Open the admin dashboard and load
+                recent backend activity.
+              </p>
+            )}
+          </section>
+        ) : null}
+
         <section style={styles.resultPanel}>
           <h2 style={styles.sectionTitle}>Assessment Result</h2>
 
@@ -378,14 +481,21 @@ export default function App() {
 
               <div style={styles.block}>
                 <h3 style={styles.blockTitle}>Triggered Signals</h3>
-                <ul style={styles.list}>
+                <ul style={styles.signalList}>
                   {result.triggered_signals.map((signal) => (
                     <li
                       key={`${signal.signal_type}-${signal.source_event_id ?? "none"}`}
-                      style={styles.listItem}
+                      style={styles.signalCard}
                     >
-                      {signal.signal_type} ({signal.confidence}) -{" "}
-                      {signal.evidence}
+                      <div style={styles.signalHeader}>
+                        <strong style={styles.signalName}>
+                          {formatTitleCase(formatSignal(signal.signal_type))}
+                        </strong>
+                        <span style={styles.signalConfidence}>
+                          {formatConfidence(signal.confidence)}
+                        </span>
+                      </div>
+                      <p style={styles.signalEvidence}>{signal.evidence}</p>
                     </li>
                   ))}
                 </ul>
@@ -395,15 +505,19 @@ export default function App() {
                 <h3 style={styles.blockTitle}>Stage History</h3>
                 <p style={styles.paragraph}>
                   Completed stages:{" "}
-                  {result.stage_state.completed_stages.join(" -> ") || "none"}
+                  {result.stage_state.completed_stages.length > 0
+                    ? result.stage_state.completed_stages
+                        .map((stage) => formatTitleCase(stage))
+                        .join(" -> ")
+                    : "None"}
                 </p>
               </div>
 
               <div style={styles.block}>
                 <h3 style={styles.blockTitle}>Explanation</h3>
-                <ul style={styles.list}>
+                <ul style={styles.explanationList}>
                   {result.explanation.map((item, index) => (
-                    <li key={index} style={styles.listItem}>
+                    <li key={index} style={styles.explanationItem}>
                       {item}
                     </li>
                   ))}
@@ -412,7 +526,8 @@ export default function App() {
             </div>
           ) : (
             <p style={styles.paragraph}>
-              No assessment yet. Submit the form to see the result.
+              No assessment yet. Submit the interaction and payment context to
+              generate a risk result.
             </p>
           )}
         </section>
@@ -429,6 +544,19 @@ function formatTitleCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function formatSignal(value: string) {
+  return value.split("_").join(" ");
+}
+
+function formatConfidence(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+  return date.toLocaleString();
+}
+
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
@@ -436,14 +564,17 @@ const styles: Record<string, React.CSSProperties> = {
       "linear-gradient(135deg, rgb(244, 239, 226) 0%, rgb(255, 250, 242) 45%, rgb(238, 246, 243) 100%)",
     color: "#172127",
     fontFamily: "Georgia, 'Times New Roman', serif",
-    padding: "32px 20px",
+    padding: "clamp(16px, 3vw, 32px) clamp(14px, 3vw, 20px)",
   },
+
   container: {
     maxWidth: "1200px",
     margin: "0 auto",
     display: "grid",
     gap: "24px",
+    width: "100%",
   },
+
   hero: {
     background: "rgba(255, 255, 255, 0.85)",
     border: "1px solid rgba(23, 33, 39, 0.1)",
@@ -460,39 +591,47 @@ const styles: Record<string, React.CSSProperties> = {
   },
   title: {
     margin: "10px 0 8px",
-    fontSize: "44px",
+    fontSize: "clamp(30px, 6vw, 44px)",
     lineHeight: 1.05,
   },
+
   subtitle: {
     margin: 0,
     maxWidth: "760px",
-    fontSize: "18px",
+    fontSize: "clamp(15px, 2.5vw, 18px)",
     lineHeight: 1.6,
     color: "#40505c",
   },
+
   layout: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
     gap: "24px",
+    alignItems: "start",
   },
+
   panel: {
     background: "rgba(255, 255, 255, 0.9)",
     border: "1px solid rgba(23, 33, 39, 0.1)",
     borderRadius: "24px",
-    padding: "24px",
+    padding: "clamp(18px, 3vw, 24px)",
     display: "grid",
     gap: "18px",
     boxShadow: "0 16px 36px rgba(23, 33, 39, 0.06)",
+    minWidth: 0,
   },
+
   resultPanel: {
     background: "#172127",
     color: "#f6efe3",
     borderRadius: "24px",
-    padding: "24px",
+    padding: "clamp(18px, 3vw, 24px)",
     display: "grid",
     gap: "18px",
     boxShadow: "0 18px 44px rgba(23, 33, 39, 0.18)",
+    minWidth: 0,
   },
+
   sectionTitle: {
     margin: 0,
     fontSize: "24px",
@@ -503,6 +642,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "14px",
     fontWeight: 600,
   },
+  helperText: {
+    fontSize: "12px",
+    lineHeight: 1.5,
+    color: "#5e6b74",
+    fontWeight: 400,
+  },
+
   input: {
     width: "100%",
     boxSizing: "border-box",
@@ -516,7 +662,7 @@ const styles: Record<string, React.CSSProperties> = {
   textarea: {
     width: "100%",
     boxSizing: "border-box",
-    minHeight: "180px",
+    minHeight: "160px",
     borderRadius: "18px",
     border: "1px solid rgba(23, 33, 39, 0.18)",
     padding: "14px",
@@ -525,6 +671,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#fffdf8",
     color: "#172127",
   },
+
   checkboxGroup: {
     display: "grid",
     gap: "10px",
@@ -544,7 +691,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "16px",
     fontWeight: 700,
     cursor: "pointer",
+    width: "100%",
   },
+
   error: {
     margin: 0,
     color: "#a52323",
@@ -556,9 +705,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   summaryGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
     gap: "14px",
   },
+
   summaryCard: {
     background: "rgba(246, 239, 227, 0.08)",
     border: "1px solid rgba(246, 239, 227, 0.12)",
@@ -566,7 +716,9 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "16px",
     display: "grid",
     gap: "6px",
+    minWidth: 0,
   },
+
   summaryLabel: {
     fontSize: "12px",
     letterSpacing: "0.08em",
@@ -605,5 +757,78 @@ const styles: Record<string, React.CSSProperties> = {
   },
   listItem: {
     lineHeight: 1.5,
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+  },
+  signalList: {
+    margin: 0,
+    padding: 0,
+    listStyle: "none",
+    display: "grid",
+    gap: "10px",
+  },
+  signalCard: {
+    background: "rgba(246, 239, 227, 0.08)",
+    border: "1px solid rgba(246, 239, 227, 0.12)",
+    borderRadius: "16px",
+    padding: "14px",
+    display: "grid",
+    gap: "8px",
+  },
+  signalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  signalName: {
+    fontSize: "15px",
+    lineHeight: 1.3,
+  },
+  signalConfidence: {
+    fontSize: "13px",
+    color: "#cdbda8",
+  },
+  signalEvidence: {
+    margin: 0,
+    lineHeight: 1.5,
+    color: "#e6d8c4",
+  },
+  explanationList: {
+    margin: 0,
+    paddingLeft: "18px",
+    display: "grid",
+    gap: "10px",
+  },
+  explanationItem: {
+    lineHeight: 1.6,
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+  },
+  adminToolbar: {
+    display: "flex",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  secondaryButton: {
+    border: "1px solid rgba(23, 33, 39, 0.18)",
+    borderRadius: "14px",
+    padding: "12px 16px",
+    background: "rgba(255, 255, 255, 0.8)",
+    color: "#172127",
+    fontSize: "14px",
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  adminPanel: {
+    background: "rgba(255, 255, 255, 0.9)",
+    border: "1px solid rgba(23, 33, 39, 0.1)",
+    borderRadius: "24px",
+    padding: "clamp(18px, 3vw, 24px)",
+    display: "grid",
+    gap: "18px",
+    boxShadow: "0 16px 36px rgba(23, 33, 39, 0.06)",
+    minWidth: 0,
   },
 };

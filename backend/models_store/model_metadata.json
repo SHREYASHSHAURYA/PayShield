@@ -1,0 +1,9 @@
+{
+  "model_name": "scam_text_pipeline",
+  "model_version": "1.0.0",
+  "training_dataset": "UCI SMS Spam Collection",
+  "training_script": "scripts/train_text_model.py",
+  "task": "binary scam probability scoring",
+  "created_for": "PayShield",
+  "notes": "TF-IDF + LogisticRegression pipeline with runtime calibration"
+}

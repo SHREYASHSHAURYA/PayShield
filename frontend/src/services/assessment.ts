@@ -6,6 +6,9 @@ import type {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1";
 
+const API_KEY = "dev-pay-shield-key";
+const CLIENT_ID = "frontend-demo";
+
 export async function assessRisk(
   payload: AssessmentRequest,
 ): Promise<AssessmentResponse> {
@@ -13,6 +16,8 @@ export async function assessRisk(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "x-api-key": API_KEY,
+      "x-client-id": CLIENT_ID,
     },
     body: JSON.stringify(payload),
   });

@@ -1,0 +1,16 @@
+FROM python:3.10.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+COPY models_store ./models_store
+COPY .env.example ./.env.example
+COPY runtime.txt ./runtime.txt
+COPY Procfile ./Procfile
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

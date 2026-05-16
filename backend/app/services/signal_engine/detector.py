@@ -7,7 +7,10 @@ from app.models.enums import (
     PaymentMethodType,
     SignalType,
 )
-from app.schemas.assessment import AssessmentRequest, InteractionEvent, TriggeredSignal
+from app.schemas.assessment import AssessmentRequest, TriggeredSignal
+from app.utils.ocr_ingest import extract_visible_text
+from app.utils.qr_parser import parse_qr_payload
+from app.utils.text_normalizer import normalize_text
 
 
 class RuleBasedSignalDetector:
@@ -15,7 +18,13 @@ class RuleBasedSignalDetector:
         signals: List[TriggeredSignal] = []
 
         for event in request.interaction_events:
-            text = self._normalize_text(event.content_text)
+            visible_metadata_text = extract_visible_text(event.metadata)
+            raw_text = " ".join(
+                part
+                for part in [event.content_text or "", visible_metadata_text]
+                if part
+            )
+            text = self._normalize_text(raw_text)
 
             if self._contains_any(
                 text,
@@ -27,7 +36,6 @@ class RuleBasedSignalDetector:
                     "within minutes",
                     "do it now",
                     "hurry",
-                    "jaldi",
                 ],
             ):
                 signals.append(
@@ -113,6 +121,7 @@ class RuleBasedSignalDetector:
                     "legal action",
                     "complaint filed",
                     "police case",
+                    "account will be blocked",
                 ],
             ):
                 signals.append(
@@ -178,6 +187,7 @@ class RuleBasedSignalDetector:
                     "approve the request",
                     "accept collect request",
                     "mandate request",
+                    "approve collect request",
                 ],
             ):
                 signals.append(
@@ -225,6 +235,7 @@ class RuleBasedSignalDetector:
                     "chargeback",
                     "return your money",
                     "refund processing",
+                    "for refund",
                 ],
             ):
                 signals.append(
@@ -299,6 +310,7 @@ class RuleBasedSignalDetector:
                     "make payment",
                     "transfer money",
                     "complete the transaction",
+                    "send money",
                 ],
             ):
                 signals.append(
@@ -318,6 +330,7 @@ class RuleBasedSignalDetector:
                     "confirm the transaction",
                     "authorize the payment",
                     "tap approve",
+                    "share otp",
                 ],
             ):
                 signals.append(
@@ -328,6 +341,29 @@ class RuleBasedSignalDetector:
                         "Transaction confirmation request detected in interaction content",
                     )
                 )
+
+            qr_payload = event.metadata.get("qr_payload", "").strip()
+            parsed_qr = parse_qr_payload(qr_payload)
+
+            if parsed_qr:
+                signals.append(
+                    self._build_signal(
+                        SignalType.QR_PAYMENT_PROMPT,
+                        0.91,
+                        event.event_id,
+                        "UPI QR payload detected in metadata",
+                    )
+                )
+
+                if parsed_qr.get("upi_id"):
+                    signals.append(
+                        self._build_signal(
+                            SignalType.UPI_ID_SHARED,
+                            0.9,
+                            event.event_id,
+                            "UPI ID extracted from QR payload metadata",
+                        )
+                    )
 
             if event.interaction_type == InteractionType.QR_SCAN:
                 signals.append(
@@ -498,7 +534,7 @@ class RuleBasedSignalDetector:
     def _normalize_text(self, text: Optional[str]) -> str:
         if not text:
             return ""
-        return re.sub(r"\s+", " ", text.strip().lower())
+        return normalize_text(text)
 
     def _contains_any(self, text: str, patterns: List[str]) -> bool:
         return any(pattern in text for pattern in patterns)

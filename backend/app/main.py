@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import router as v1_router
 from app.core import settings
-
+from app.services.monitoring import get_runtime_status
 
 app = FastAPI(
     title=settings.app_name,
@@ -12,7 +12,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origins=settings.frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,7 +21,18 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": settings.app_name}
+    return {
+        "status": "ok",
+        "service": settings.app_name,
+    }
+
+
+@app.get("/status")
+def status() -> dict:
+    return {
+        "status": "ok",
+        **get_runtime_status(),
+    }
 
 
 app.include_router(v1_router, prefix=settings.api_prefix)
